@@ -1,0 +1,5 @@
+/extra-addons/*
+/pg_data/*
+/odoo_17.0/*
+/redis/*
+/odoo/config/*
