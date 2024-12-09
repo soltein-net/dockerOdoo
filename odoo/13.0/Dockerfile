@@ -10,6 +10,7 @@ ARG TARGETARCH
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
+        wget \
         unzip \
         gcc \
         ca-certificates \
@@ -29,51 +30,27 @@ RUN apt-get update && \
         valgrind \
         libldap2-dev \
         python3-dev \
-        python3-magic \
-        python3-num2words \
-        python3-odf \
-        python3-pdfminer \
+        python3.10-venv \
+        adduser \
+        lsb-base \
+        zlib1g-dev \
+        libncurses5-dev \
+        libgdbm-dev \
+        libnss3-dev \
+        libreadline-dev \
+        libffi-dev \
+        libsqlite3-dev \
+        libbz2-dev \
+        libxml2-dev \
+        libxslt1-dev \
+        libpq-dev \
+        node-less \
+        npm \
+        git \
         python3-pip \
-        python3-phonenumbers \
-        python3-pyldap \
-        python3-qrcode \
-        python3-renderpm \
-        python3-setuptools \
-        python3-slugify \
-        python3-vobject \
-        python3-watchdog \
-        python3-xlrd \
-        python3-xlwt \
-        python3-cffi \
+        python3-venv \
         python3-psycopg2 \
-        python3-babel \
-        python3-dateutil \
-        python3-decorator \
-        python3-docutils \
-        python3-geoip2 \
-        python3-gevent \
-        python3-pil \
-        python3-jinja2 \
-        python3-libsass \
-        python3-lxml \
-        python3-ofxparse \
-        python3-passlib \
-        python3-polib \
-        python3-psutil \
-        python3-pydot \
-        python3-openssl \
-        python3-pypdf2 \
-        python3-rjsmin \
-        python3-reportlab \
-        python3-requests \
-        python3-serial \
-        python3-stdnum \
-        python3-tz \
-        python3-usb \
-        python3-werkzeug \
-        python3-xlsxwriter \
-        python3-zeep \
-        xz-utils && \
+        postgresql-client && \
     if [ -z "${TARGETARCH}" ]; then \
         TARGETARCH="$(dpkg --print-architecture)"; \
     fi; \
@@ -105,13 +82,25 @@ RUN echo 'deb http://apt.postgresql.org/pub/repos/apt/ jammy-pgdg main' > /etc/a
 # Install rtlcss (on Debian buster)
 RUN npm install -g rtlcss
 
-# Copy entrypoint script and Odoo configuration file
-COPY ./entrypoint.sh /
-COPY ./odoo.conf /etc/odoo/odoo17.conf
-COPY ./wait-for-psql.py /usr/local/bin/wait-for-psql.py
-
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+ARG GROUP_ID=1000
+
+
+# instala python 3.8
+WORKDIR /tmp
+RUN wget https://www.python.org/ftp/python/3.8.20/Python-3.8.20.tgz \
+    && tar xzf Python-3.8.20.tgz \
+    && cd Python-3.8.20 \
+    && ./configure --enable-optimizations \
+    && make altinstall \
+    && cd .. \
+    && rm -rf Python-3.8.20 Python-3.8.20.tgz
+
+# Copy entrypoint script and Odoo configuration file
+COPY ./entrypoint.sh /
+COPY ./odoo.conf /etc/odoo/odoo13.conf
+COPY ./wait-for-psql.py /usr/local/bin/wait-for-psql.py
 
 # Crea el directorio y los usuarios/grupos
 RUN mkdir /var/lib/odoo && \
@@ -122,36 +111,43 @@ RUN mkdir /var/lib/odoo && \
     && chmod +x /entrypoint.sh \
     && chmod +x /usr/local/bin/wait-for-psql.py
 
-
-COPY ./requirements.txt /tmp/requirements.txt
-
-RUN python3 -m pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt
-
-# Cambia al usuario odoo
-#USER odoo
-
-
-# Set permissions and Mount /var/lib/odoo to allow restoring filestore and /mnt/extra-addons for users addons
-
-
-RUN chown odoo /etc/odoo/odoo17.conf \
+RUN chown odoo /etc/odoo/odoo13.conf \
     && mkdir -p /mnt/extra-addons \
     && chown -R odoo /mnt/extra-addons \
-    && mkdir -p /opt/odoo17.0  \
-    && chown -R odoo /opt/odoo17.0
+    && mkdir -p /opt/odoo13.0  \
+    && chown -R odoo /opt/odoo13.0
+
+
+RUN pip install Cython==0.29.24
+
+RUN python3.8 -m venv /opt/venv
+RUN chown -R odoo /opt/venv
+
+ENV PATH "/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV "/opt/venv"
+COPY ./requirements.txt /tmp/requirements.txt
+RUN grep -v "lxml" /tmp/requirements.txt > /tmp/requirements_without_lxml.txt
+
+RUN pip install setuptools==57.5.0 wheel==0.41.2 \
+    && pip install -r /tmp/requirements_without_lxml.txt \
+    && rm /tmp/requirements_without_lxml.txt
+
+ENV CFLAGS="-DXML_POOR_ENTROPY=1"
+RUN pip install lxml==4.6.5
+
 #    && curl -o odoo_17.0.20240815.zip -sSL http://nightly.odoo.com/17.0/nightly/src/odoo_17.0.20240815.zip \
 #    && unzip -q odoo_17.0.20240815.zip -d /opt/  \
 #    && mv /opt/odoo-17.0.* /opt/odoo17.0  \
 #    && rm -rf odoo_17.0.20240815.zip\
 
 
-VOLUME ["/var/lib/odoo", "/mnt/extra-addons", "/opt/odoo17.0"]
+VOLUME ["/var/lib/odoo", "/mnt/extra-addons", "/opt/odoo13.0"]
 
 # Expose Odoo services
 EXPOSE 8069 8071 8072
 
 # Set the default config file
-ENV ODOO_RC /etc/odoo/odoo17.conf
+ENV ODOO_RC /etc/odoo/odoo13.conf
 
 
 # Set default user when running the container

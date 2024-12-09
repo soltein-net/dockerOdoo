@@ -1,44 +1,28 @@
 services:
-  odoo:
-    container_name: odoo
+  odoo13:
     build:
-      context: ./odoo/17.0
+      context: ./odoo/13.0
       dockerfile: ./Dockerfile
     ports:
       - "8069:8069"
     networks:
-      - odoo_network
+      - odoo13
     volumes:
       - ./odoo/config:/etc/odoo
       - ./extra-addons:/mnt/extra-addons
       - ./odoo/data:/var/lib/odoo
-      - ./odoo17.0:/opt/odoo17.0
+      - ./odoo13.0:/opt/odoo13.0
     depends_on:
-      - db
-      - redis
+      db13:
+        condition: service_healthy
     environment:
-      - HOST=db
+      - HOST=db13
       - USER=odoo
       - PASSWORD=odoo
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - REDIS_PASSWORD=odoo
-  redis:
-    image: "redis:alpine"
-    container_name: "redis"
-    ports:
-      - "6379:6379"
-    networks:
-      - odoo_network
-    volumes:
-      - ./redis/redis_data:/data
-      - ./redis/conf:/usr/local/etc/redis/redis.conf
-  db:
+  db13:
     image: postgres:14
-    container_name: db
     networks:
-      - odoo_network
+      - odoo13
     volumes:
       - ./pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -48,5 +32,5 @@ services:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
 networks:
-  odoo_network:
+  odoo13:
     driver: bridge
